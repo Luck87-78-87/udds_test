@@ -1,0 +1,9 @@
+﻿  pub.cpp
+d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\pub\idl_userdatatype.h(38): warning C4267: “+=”: 从“size_t”转换到“int”，可能丢失数据
+d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\seq\sequence.template(105): warning C4018: “<”: 有符号/无符号不匹配
+  d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\seq\sequence.template(63): note: 编译 类 模板 成员函数 "bool sequence<std::basic_string<char,std::char_traits<char>,std::allocator<char>>>::set_maximum(unsigned long)" 时
+  d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\seq\sequence.template(41): note: 参见对正在编译的函数 模板 实例化“bool sequence<std::basic_string<char,std::char_traits<char>,std::allocator<char>>>::set_maximum(unsigned long)”的引用
+  d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\seq\sequence.template(5): note: 编译 类 模板 成员函数 "sequence<std::basic_string<char,std::char_traits<char>,std::allocator<char>>>::sequence(void)" 时
+  d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\qospolicy.h(653): note: 参见对正在编译的函数 模板 实例化“sequence<std::basic_string<char,std::char_traits<char>,std::allocator<char>>>::sequence(void)”的引用
+  d:\projectpractice\udds_vs2017_trial\ddd\demotool\pubsub_vs2017\lib\udds\include\seq\sequence.template(600): note: 参见对正在编译的 类 模板 实例化 "sequence<std::basic_string<char,std::char_traits<char>,std::allocator<char>>>" 的引用
+  Pub.vcxproj -> D:\Projectpractice\uDDS_VS2017_Trial\ddd\DemoTool\PubSub_vs2017\Pub\../bin/VS2017x64Debug\Pub.exe

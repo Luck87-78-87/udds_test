@@ -1,0 +1,827 @@
+#include "SEQ/Sequence.h"
+
+template <typename T>
+sequence<T>::sequence() 
+{
+    _release = 1;
+    _length = 0;
+    _maximum = 0;
+    _buffer = NULL;
+}
+
+template <typename T>
+sequence<T>::sequence(const sequence &IDL_s)
+{
+    _release = 1;
+    _length = 0;
+    _maximum = 0;
+    _buffer = NULL;
+    unsigned long IDL_maximum = IDL_s._maximum;
+    if (set_maximum(IDL_maximum))
+    {
+        copy_no_allocI(IDL_s);
+    }
+}
+
+template <typename T>
+sequence<T>::sequence(unsigned long IDL_max) 
+{
+    _release = 1;
+    _length = 0;
+    _maximum = 0;
+    _buffer = NULL;
+    set_maximum(IDL_max);
+}
+
+template <typename T>
+sequence<T>:: ~sequence()
+{
+    if (_buffer && _release)
+    {
+        set_maximum(0);
+    }
+}
+/*
+��   �룺�����Ƶ�ģ�������
+��   �������Ʋ�����ģ�������
+�������ܣ������������ = ��������copyʵ�ֵȺ��ұߵ�ģ�������ԵȺ���ߵ�ģ�������ֵ��
+*/
+template <typename T>
+sequence<T>& sequence<T>::operator= (const sequence &IDL_s) 
+{
+    copy(IDL_s);
+    return *this;
+}
+
+/*
+��   �룺_maximum������ֵ
+��   �����Ƿ��滻��ֵ���滻�»������ɹ�?true:false
+�������ܣ����ݲ���������Ӧ��С���»����������ɻ��������ݸ��Ƶ��»��������ͷžɻ�������
+*/
+template<typename T>
+bool sequence<T>::set_maximum(unsigned long new_max)
+{
+    T* newBuffer = NULL;
+    T* oldBuffer = NULL;
+    unsigned long newLength = 0;
+
+    if (!check_invariantsI()) 
+    {
+        return false;
+    }
+    if (new_max < 0) 
+    {
+        return false;
+    }
+    //��ǰ���������ͷ�Ȩ��
+    if (!_release)
+    {
+        return false;
+    }
+
+    if ((unsigned long)new_max == this->_maximum) 
+    {
+        /* �洢����Сδ���� */
+        return true;
+    }
+
+    if (new_max > 0) 
+    {
+        newBuffer = allocbuf(new_max);
+        if (newBuffer == NULL) 
+        {
+            return false;
+        }
+    }
+
+    //���»�������ȡ�㹻�Ŀռ�
+    newLength = (this->_length < (unsigned long)new_max) ? (unsigned long)this->_length : new_max;
+    if (newLength > 0 && this->_buffer == NULL) 
+    {
+        return false;
+    }
+    
+    //���ɻ��������ݷ����»�������
+    for (int i = 0; i < newLength; ++i) 
+    {
+        newBuffer[i] = this->_buffer[i];
+    }
+    oldBuffer = this->_buffer;
+    this->_buffer = newBuffer;
+    this->_maximum = new_max;
+    this->_length = newLength;
+
+    if (oldBuffer != NULL)
+    {
+        freebuf(oldBuffer);
+    }
+    if (!check_invariantsI())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+/*
+��   �룺��
+��   ����ʵ��ʹ�õĻ�������Сֵ
+�������ܣ���ȡʵ��ʹ�õĻ�������Сֵ��
+*/
+template<typename T>
+unsigned long sequence<T>::length() const
+{
+   return _length;
+}
+
+/*
+��   �룺�µ���ʹ�û�������Сֵ
+��   �������óɹ� ? true : false
+�������ܣ���������ʹ�û�������Сֵ������ֵС��maximumֵ���򷵻�false����
+*/
+template <typename T>
+bool sequence<T>::length(unsigned long len) 
+{
+    if (len<0 || len > _maximum)
+    {
+        return false;
+        //return set_maximum(len);
+    }
+    else
+    {
+        _length = len;
+    }
+    return true;
+}
+/*
+��   �룺length������Ҫʹ�õĻ�������С��
+        max���µĻ�������С
+��   �������óɹ� ? true : false
+�������ܣ����ݲ����ж���ensure_len > maxʱ����false, Sequence���㹻�Ŀռ��������lengthֵ��
+        �ռ䲻���ҵ�ǰ������Ϊ�������������maximum��������Sequence�ռ�������lengthֵ�����������Ϊ���������򷵻�false��
+*/
+template <typename T>
+bool sequence<T>::ensure_length(unsigned long len, unsigned long max)
+{
+    if (len > max||len<0||max<0)
+    {
+        return false;
+    }
+    if (len > _maximum)
+    {
+        if (set_maximum(max))
+        {
+            length(len);
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return length(len);
+    }
+    return true;
+}
+/*
+��   �룺�����Ƶ�ģ�������
+��   �����Ƿ��Ƴɹ� ? true : false
+�������ܣ����ӻ�������С�ĸ���, Ҫ���ƵĻ��������ȱȵ�ǰSequence�Ļ�������СҪС������������ֱ�ӽ��и��Ʋ�����
+        �������set_maximum()���³�ʼ����������Сʹ���г���Ļ���������Ҫ�����������ٽ��и��Ʋ�����
+*/
+template <typename T>
+bool sequence<T>::copy(const sequence &src_seq)
+{
+    if (this == &src_seq) return true;
+    if (!_release || (src_seq._maximum > _maximum))
+    {
+        if (_buffer && _release)
+        {
+            freebuf(_buffer);
+        }
+        _buffer = allocbuf(src_seq._maximum);
+        _maximum = src_seq._maximum;
+        _release = src_seq._release;
+    }
+    _length = src_seq._length;
+    for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++)
+    {
+        _buffer[IDL_j] = src_seq._buffer[IDL_j];
+    }
+    return true;
+}
+
+/*
+��   �룺�������±��
+��   �����������±�Ŷ�Ӧ�Ļ�����ֵ
+�������ܣ��ж��±�ֵ�ɻ�ȡ���ݣ�����������������Ϊ��ʱ���ط������������±��Ӧ������ֵ�����򷵻������������±��Ӧ������ֵ��
+*/
+template<typename T>
+const T sequence<T>::get_at(unsigned long i)
+{
+    return *(const T*)get_reference(i);
+}
+
+/*
+��   �룺i:	�������±�ţ�
+        Val:Ҫ���Ƶ���������ģ������
+��   �����������±�Ŷ�Ӧ�Ļ�����ֵ
+�������ܣ��ж��±�ֵ�ɻ�ȡ���ݣ�����������Ϊ��ʱ����������Ӧ�±�ֵ�滻Ϊval����ֵ�����أ����򷵻�NULL.
+*/
+template<typename T>
+T & sequence<T>::set_at(unsigned long i, const T & val)
+{
+    *(this->get_reference(i)) = val;
+    return  *get_reference(i);
+}
+
+/*
+��   �룺��
+��   ����������
+�������ܣ���ȡ��Sequence�Ļ�������
+*/
+template<typename T>
+T * sequence<T>::get_buffer()
+{
+    return _buffer;
+}
+
+/*
+��   �룺array[]�������Ƶ��������������
+        Length�����鳤�ȡ�
+��   �����Ƿ��Ƴɹ�?true:false
+�������ܣ�ͨ���м�Sequence����array�����е����ݸ��Ƶ���ǰSequence�����в��ͷ��м�Sequence����
+*/
+template <typename T>
+bool sequence<T>::from_array(const T array[], unsigned long copy_length) 
+{
+    sequence arraySeq;
+
+    /* ����������ջ�ϵı������� */
+    if (!arraySeq.loan_buffer((T*)array, copy_length, copy_length)) 
+    {
+        return false;
+    }
+
+    /* ���Ƶ��������У���Ҫʱ������С */
+    if (this->copy(arraySeq) == NULL) 
+    {
+        return false;
+    }
+
+    /* �Ӷ�ջ�ϵı���������ж������ */
+    arraySeq.unloan();
+
+    return true;
+}
+
+/*
+��   �룺array[]������ǰ�������������ݸ��Ƴ���洢����
+        Length�����鳤�ȡ�
+��   �����Ƿ��Ƴɹ�?true:false
+�������ܣ�ͨ���м�Sequence���󽫵�ǰSequence��������ݸ��Ƶ�array�����в��ͷ��м�Sequence����
+*/
+template <typename T>
+bool sequence<T>::to_array(T array[], unsigned long copy_length) 
+{
+    sequence arraySeq;
+
+    /* ����������ջ�ϵı������� */
+    if (!arraySeq.loan_buffer((T*)array, copy_length, copy_length)) 
+    {
+        return false;
+    }
+
+    /* ���Ƶ��������У���������С */
+    if (!arraySeq.copy_no_allocI(*this))
+    {
+        return false;
+    }
+
+    /* �Ӷ�ջ�ϵı���������ж������ */
+    arraySeq.unloan();
+
+    return true;
+}
+
+/*
+��   �룺Ҫ��ȡģ������󻺳����±ꡣ
+��   �����±��Ӧ������
+�������ܣ��ж��±�ֵ�ɻ�ȡ���ݣ�����������Ϊ��ʱ���ػ������±��Ӧ������ֵ��
+*/
+template<typename T>
+T * sequence<T>::get_reference(unsigned long i)
+{
+    if (i < 0 || i >= this->_length) 
+    {
+        return NULL;
+    }
+
+    if (this->_buffer != NULL) 
+    {
+        return &(this->_buffer[i]);
+    }
+    return NULL;
+}
+
+/*
+��   �룺��
+��   �������ͨ��?true:false
+�������ܣ����ģ�������Ĳ������Ƿ���ȷ��
+*/
+template<typename T>
+int sequence<T>::check_invariantsI()
+{
+    int invariantsHold = DDS_FALSE;
+
+    if (this->_length > this->_maximum) 
+    {
+
+        return invariantsHold;
+    }
+    if (this->_maximum > 0 && this->_buffer == NULL) 
+    {
+
+        return invariantsHold;
+    }
+
+    invariantsHold = DDS_TRUE;
+
+    return invariantsHold;
+}
+
+/*
+��   �룺�����Ƶ�ģ�������
+��   �����Ƿ��Ƴɹ�?true:false
+�������ܣ������ӻ�������С�ĸ��ƣ����ݸ��ƶ���ͱ����ƶ���Ļ������ж�������и��ơ�
+*/
+template<typename T>
+bool sequence<T>::copy_no_allocI(const sequence & src)
+{
+    unsigned long length = src._length;
+    int i = 0;
+    bool ret = true;
+
+    ret = this->length(length);
+    if (!ret) {
+        return ret;
+    }
+	this->_release = src._release;
+    for (; i < length; i++)
+    {
+        this->_buffer[i] = src._buffer[i];
+    }
+
+    return ret;
+}
+/*
+��   �룺buffer��Ҫ���õĻ�����
+		new_length��Ҫ���õĻ�����ʵ��ʹ�ó��ȡ�
+		new_max��Ҫ���õĻ�������С
+��   �����Ƿ���û������ɹ�?true:false;
+�������ܣ��жϽ��û�������Sequence _maximumֵ�Ƿ�Ϊ�㣬Ϊ��������ֵ
+        ��ȷ�򽫽��õĻ�������ֵ����Sequence������_release��Ϊ0��ʾ�û��������ɲ�����
+*/
+template<typename T>
+bool sequence<T>::loan_buffer(T* buffer, unsigned long new_length, unsigned long new_max)
+{
+
+    if (!check_invariantsI()) 
+    {
+        return false;
+    }
+    if (this->_maximum != 0) 
+    {
+        return false;
+    }
+    if (new_length < 0 || new_max < 0) 
+    {
+        return false;
+    }
+    if (new_length > new_max) 
+    {
+        return false;
+    }
+    if (new_max > 0 && buffer == NULL) 
+    {
+        return false;
+    }
+
+    this->_buffer = buffer;
+    this->_length = new_length;
+    this->_maximum = new_max;
+    this->_release = 0;
+
+    if (!check_invariantsI()) 
+    {
+        return false;
+    }
+    return true;
+}
+
+/*
+��    �룺��
+��    �����Ƿ�Ϊ��ʼ��Sequence�ɹ�?true:false;
+�������ܣ��жϸ�Sequence�Ļ������Ƿ�Ϊ���ã������ͷŻ���������ʼ��Sequence���󣬷����ͷŻ���������ʼ��Sequence����
+*/
+template <typename T>
+bool sequence<T>::unloan()
+{
+    //_buffer��Ϊ����_buffer�����ͷ�
+    if (_buffer&&_release)
+    {
+        freebuf(_buffer);
+    }
+    _buffer = NULL;
+    _maximum = 0;
+    _length = 0;
+    _release = 1;
+    return true;
+}
+
+template <class T>
+void sequence<T>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		_buffer[IDL_j].Marshal(cdr);
+	}
+}
+
+template <class T>
+void sequence<T>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		_buffer[IDL_j].UnMarshal(cdr);
+	}
+}
+
+//wangyi 2022/9/13  char*��������
+template <>
+inline void sequence<char*>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutString(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<char*>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		char *IDL_str;
+		cdr->GetString(IDL_str);
+		_buffer[IDL_j] = IDL_str;
+/* jmj:2023/2/13 char* ע��delete */
+/*		delete IDL_str; */
+
+		IDL_str = NULL;
+	}
+}
+
+//wangyi 2021/10/13 short��������
+template <>
+inline void sequence<short>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutShort(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<short>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetShort(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  long��������
+template <>
+inline void sequence<long>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutLong(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<long>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetLong(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  longlong��������
+template <>
+inline void sequence<long long>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutLongLong(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<long long>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetLongLong(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  long double��������
+template <>
+inline void sequence<long double>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutLongDouble(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<long double>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetLongDouble(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  string��������
+template <>
+inline void sequence<string>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutString(_buffer[IDL_j].c_str());
+	}
+}
+
+template <>
+inline void sequence<string>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		char *IDL_str;
+		cdr->GetString(IDL_str);
+		_buffer[IDL_j] = IDL_str;
+		delete IDL_str;
+		IDL_str = NULL;
+	}
+}
+
+//wangyi 2021/10/13  char��������
+template <>
+inline void sequence<char>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutChar(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<char>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetChar(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  wchar��������
+
+//wangyi 2021/10/13  boolean��������
+template <>
+inline void sequence<bool>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutBoolean(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<bool>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetBoolean((unsigned char&)_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  octet��������
+template <>
+inline void sequence<octet>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutOctet(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<octet>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetOctet(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  unsigned short��������
+template <>
+inline void sequence<unsigned short>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutUShort(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<unsigned short>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetUShort(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  unsigned long��������
+template <>
+inline void sequence<unsigned long>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutULong(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<unsigned long>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetULong(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  unsigned long long��������
+template <>
+inline void sequence<unsigned long long>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutULongLong(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<unsigned long long>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetULongLong(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  float��������
+template <>
+inline void sequence<float>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutFloat(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<float>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetFloat(_buffer[IDL_j]);
+	}
+}
+
+//wangyi 2021/10/13  double��������
+template <>
+inline void sequence<double>::Marshal(CDR *cdr) const {
+	cdr->PutULong(_length);
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->PutDouble(_buffer[IDL_j]);
+	}
+}
+
+template <>
+inline void sequence<double>::UnMarshal(CDR *cdr) {
+	cdr->GetULong(_length);
+	if (!_release || (_length > _maximum)) {
+		if (_buffer && _release) {
+			freebuf(_buffer);
+		}
+		_maximum = _length;
+		_buffer = allocbuf(_maximum);
+		_release = 1;
+	}
+	for (unsigned long IDL_j = 0; IDL_j < _length; IDL_j++) {
+		cdr->GetDouble(_buffer[IDL_j]);
+	}
+}
